@@ -1,0 +1,11 @@
+
+Flask>=3.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+librosa>=0.10.0.post2
+scikit-learn>=1.3.0
+soundfile>=0.12.1
+opencv-python>=4.8.0.74
+face-recognition>=1.3.0
+tensorflow>=2.15.0; platform_system != "Darwin"  # for Keras model (optional), skip on mac if needed
+h5py>=3.10.0
