@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>多模态上传与采集</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background: #f7f7f7; }
+    .wrap { max-width: 960px; margin: 40px auto; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
+    h1 { margin-top: 0; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .field { display: flex; align-items: center; gap: 12px; }
+    .col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { background:#fafafa; border:1px solid #eee; border-radius:12px; padding:16px; }
+    label { width: 120px; color: #333; }
+    input[type=file] { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; }
+    textarea { width: 90%; min-height: 120px; padding: 10px; border:1px solid #ddd; border-radius:8px; resize: vertical; }
+    .hint { color: #666; font-size: 12px; margin-top: -4px;}
+    .row { display:flex; gap:12px; align-items:center; flex-wrap: wrap; }
+    button, .btn { background: #2f7d6d; color: white; border: none; border-radius: 10px; padding: 10px 14px; cursor: pointer; font-size: 14px; }
+    button:hover, .btn:hover { filter: brightness(0.95); }
+    .btn.secondary { background:#334155; }
+    .btn.ghost { background:#e5e7eb; color:#111827; }
+    .status { font-size: 12px; color:#475569; }
+    video, audio { width:100%; max-height:280px; background:#000; border-radius:8px; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; background:#eef2ff; color:#4338ca; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>上传 / 录制 音频、文本与视频</h1>
+    <p class="status">可选择本地文件，也可在浏览器内写文本、录音、录视频。</p>
+
+    <!-- 选择上传 -->
+    <div class="card">
+      <h3>选择本地文件</h3>
+      <div class="grid">
+        <div class="field">
+          <label>音频文件：</label>
+          <input id="audioFile" type="file" accept=".wav,.mp3,.m4a,.flac" />
+        </div>
+        <div class="hint">推荐 .wav 单声道 16kHz；非 .wav 也会尝试读取。</div>
+
+        <div class="field">
+          <label>文本文件：</label>
+          <input id="textFile" type="file" accept=".txt,.md" />
+        </div>
+        <div class="hint">若填写了下方“在线文本”，将以在线文本为准。</div>
+
+        <div class="field">
+          <label>视频文件：</label>
+          <input id="videoFile" type="file" accept=".mp4,.avi,.mov,.mkv,.webm" />
+        </div>
+        <div class="hint">将抽帧做人脸检测与情绪分析。</div>
+      </div>
+    </div>
+
+    <div class="col" style="margin-top:16px;">
+      <!-- 在线文本 -->
+      <div class="card">
+        <h3>在线写文本</h3>
+        <textarea id="textEditor" placeholder="在此输入文本内容"></textarea>
+        <div class="row">
+          <span class="status" id="textStatus">未填在线文本</span>
+          <button class="btn ghost" id="clearText">清空文本</button>
+        </div>
+      </div>
+
+      <!-- 录音 -->
+      <div class="card">
+        <h3>在线录音</h3>
+        <div class="row">
+          <button class="btn" id="startAudioRec">开始录音</button>
+          <button class="btn secondary" id="stopAudioRec" disabled>停止录音</button>
+          <span class="status" id="audioStatus">尚未录音</span>
+        </div>
+        <audio id="audioPreview" controls style="margin-top:8px; display:none;"></audio>
+      </div>
+    </div>
+
+    <!-- 录视频 -->
+    <div class="card" style="margin-top:16px;">
+      <h3>在线录视频 </h3>
+      <video id="videoPreview" playsinline autoplay muted></video>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn" id="startVideoRec">开始录制</button>
+        <button class="btn secondary" id="stopVideoRec" disabled>停止录制</button>
+        <button class="btn ghost" id="toggleCam">开/关 预览</button>
+        <span class="status" id="videoStatus">预览未开启</span>
+      </div>
+
+      <video id="videoPlayback" controls style="margin-top:8px; display:none;"></video>
+    </div>
+
+    <!-- 提交 -->
+    <form id="analysisForm" action="/analyze" method="post" enctype="multipart/form-data">
+      <div class="row" style="margin-top:16px; justify-content:flex-end;">
+        <button type="submit" id="submitAll" class="btn">开始分析并查看仪表盘</button>
+      </div>
+    </form>
+  </div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  // 在线文本
+  const textEditor = $("textEditor");
+  const textStatus = $("textStatus");
+  $("clearText").onclick = () => { textEditor.value = ""; textStatus.textContent = "未填在线文本"; };
+  textEditor.addEventListener("input", () => {
+    const len = textEditor.value.trim().length;
+    textStatus.textContent = len > 0 ? `已填写（${len} 字）` : "未填在线文本";
+  });
+
+  // 录音
+  let audioStream = null, audioRecorder = null, audioChunks = [], audioBlob = null;
+  const audioStatus = $("audioStatus"), audioPreview = $("audioPreview");
+
+  $("startAudioRec").onclick = async () => {
+    try {
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+      audioChunks = [];
+      audioRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+      audioRecorder.onstop = () => {
+        audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        audioPreview.src = URL.createObjectURL(audioBlob);
+        audioPreview.style.display = "block";
+        audioStatus.textContent = `录音完成（${(audioBlob.size/1024).toFixed(1)} KB）`;
+        audioStream.getTracks().forEach(t => t.stop());
+        audioStream = null;
+      };
+      audioRecorder.start();
+      $("startAudioRec").disabled = true;
+      $("stopAudioRec").disabled = false;
+      audioStatus.textContent = "录音中…";
+    } catch (err) {
+      console.error(err);
+      audioStatus.textContent = "无法开始录音（请检查权限/HTTPS）。";
+    }
+  };
+  $("stopAudioRec").onclick = () => {
+    if (audioRecorder && audioRecorder.state !== "inactive") {
+      audioRecorder.stop();
+      $("startAudioRec").disabled = false;
+      $("stopAudioRec").disabled = true;
+    }
+  };
+
+  // 录视频
+  let camStream = null, videoRecorder = null, videoChunks = [], videoBlob = null;
+  const videoPreview = $("videoPreview"), videoPlayback = $("videoPlayback"), videoStatus = $("videoStatus");
+
+  const ensureCam = async () => {
+    if (!camStream) {
+      camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      videoPreview.srcObject = camStream;
+      await videoPreview.play().catch(()=>{});
+      videoStatus.textContent = "预览已开启";
+    }
+  };
+
+  $("toggleCam").onclick = async () => {
+    if (camStream) {
+      camStream.getTracks().forEach(t => t.stop());
+      camStream = null;
+      videoPreview.srcObject = null;
+      videoStatus.textContent = "预览未开启";
+    } else {
+      try { await ensureCam(); } catch (e) { videoStatus.textContent = "无法开启预览（权限/HTTPS）"; }
+    }
+  };
+
+  $("startVideoRec").onclick = async () => {
+    try {
+      await ensureCam();
+      videoRecorder = new MediaRecorder(camStream, { mimeType: 'video/webm' });
+      videoChunks = [];
+      videoRecorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunks.push(e.data); };
+      videoRecorder.onstop = () => {
+        videoBlob = new Blob(videoChunks, { type: 'video/webm' });
+        videoPlayback.src = URL.createObjectURL(videoBlob);
+        videoPlayback.style.display = "block";
+        videoStatus.textContent = `录制完成（${(videoBlob.size/1024/1024).toFixed(2)} MB）`;
+      };
+      videoRecorder.start();
+      $("startVideoRec").disabled = true;
+      $("stopVideoRec").disabled = false;
+      videoStatus.textContent = "录制中…";
+    } catch (err) {
+      console.error(err);
+      videoStatus.textContent = "无法开始录制（权限/HTTPS）";
+    }
+  };
+  $("stopVideoRec").onclick = () => {
+    if (videoRecorder && videoRecorder.state !== "inactive") {
+      videoRecorder.stop();
+      $("startVideoRec").disabled = false;
+      $("stopVideoRec").disabled = true;
+    }
+  };
+
+  // 统一提交
+  $("submitAll").onclick = async () => {
+    const fd = new FormData();
+
+    // 音频：录音优先，否则本地文件
+    if (audioBlob) fd.append("audio", audioBlob, "recorded_audio.webm");
+    else if ($("audioFile").files[0]) fd.append("audio", $("audioFile").files[0]);
+
+    // 文本：在线文本优先，否则文件
+    const txt = $("textEditor").value.trim();
+    if (txt.length > 0) {
+      // Add text as form field for direct processing
+      fd.append("text_input", txt);
+      // Also add as file for compatibility
+      const textBlob = new Blob([txt], { type: "text/plain; charset=utf-8" });
+      fd.append("text", textBlob, "typed_text.txt");
+    } else if ($("textFile").files[0]) {
+      fd.append("text", $("textFile").files[0]);
+    }
+
+    // 视频：录制优先，否则本地文件
+    if (videoBlob) fd.append("video", videoBlob, "recorded_video.webm");
+    else if ($("videoFile").files[0]) fd.append("video", $("videoFile").files[0]);
+
+    try {
+      const resp = await fetch("/analyze", { method: "POST", body: fd });
+      const html = await resp.text();
+      document.open(); document.write(html); document.close();
+    } catch (e) {
+      alert("提交失败，请检查控制台或网络。");
+      console.error(e);
+    }
+  };
+})();
+</script>
+</body>
+</html>

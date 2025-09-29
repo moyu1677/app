@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>抑郁症检测</title>
+  <link rel="stylesheet" type="text/css" href="/static/CSS/style.css" />
+  <script type="text/javascript" src="/static/js/d3/d3.js"></script>
+  <script src="//d3js.org/d3-scale-chromatic.v0.3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-tip/0.7.1/d3-tip.min.js"></script>
+  <style>
+    body {
+      margin: 0; 
+      font-family: Arial, sans-serif;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+    /* 侧边栏 */
+    #sidebar {
+      width: 220px;
+      background: #2f3e46;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      padding-top: 20px;
+      box-sizing: border-box;
+    }
+    #sidebar h2 {
+      text-align: center;
+      margin-bottom: 30px;
+      font-weight: normal;
+    }
+    .sidebar-item {
+      padding: 15px 20px;
+      cursor: pointer;
+      border-left: 5px solid transparent;
+      transition: background 0.3s, border-left-color 0.3s;
+    }
+    .sidebar-item:hover {
+      background: #354f52;
+    }
+    .sidebar-item.active {
+      background: #52796f;
+      border-left-color: #84a98c;
+      font-weight: bold;
+    }
+    /* 右侧大内容区域 */
+    #content {
+      flex-grow: 1;
+      background: #f0f0f0;
+      padding: 20px 40px;
+      overflow-y: auto;
+    }
+    /* 隐藏的内容区 */
+    .content-section {
+      display: none;
+    }
+    .content-section.active {
+      display: block;
+    }
+    /* 标题样式 */
+    h2.section-title {
+      margin-top: 0;
+      margin-bottom: 15px;
+      color: #2f3e46;
+      font-style: italic;
+    }
+    /* 统一图例小圆点 */
+    .key-dot {
+      display: inline-block;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .you { background: #1f7a8c; }
+    .others { background: #f2cc8f; }
+    /* 简单滚动条美化 */
+    #content::-webkit-scrollbar {
+      width: 8px;
+    }
+    #content::-webkit-scrollbar-thumb {
+      background-color: #84a98c;
+      border-radius: 4px;
+    }
+
+    /* 综合结果区域的样式示例 */
+    #integrated-result {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    #integrated-result h2 {
+      margin-top: 0;
+      margin-bottom: 15px;
+      color: #2f3e46;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="sidebar">
+    <h2>仪表盘导航</h2>
+    <div class="sidebar-item active" data-target="audio-section">音频情绪</div>
+    <div class="sidebar-item" data-target="video-section">视频情感</div>
+    <div class="sidebar-item" data-target="text-section">文本心理</div>
+    <div class="sidebar-item" data-target="integrated-section">综合结果</div>
+    <div class="sidebar-item" data-target="ganyu-section">干预</div>
+  </div>
+
+  <div id="content">
+
+    <!-- 音频情绪区域 -->
+    <section id="audio-section" class="content-section active">
+      <h2 class="section-title">Perceived Audio Emotions (音频情绪识别)</h2>
+      <!-- 保持之前所有内容不变 -->
+      <div class="legend1">
+        <p><span class="key-dot you"></span>您</p>
+        <p><span class="key-dot others"></span>其他候选人</p>
+      </div>
+      <div id="audio_emotions_dist" style="margin-top: 10px;"></div>
+      <p>您最频繁的情绪是：<b>{{ aud_emo }}</b></p>
+      <div class="parent">
+        <ul>
+          <li>愤怒    : {{ aud_prob[0] }}%</li>
+          <li>厌恶    : {{ aud_prob[1] }}%</li>
+          <li>恐惧    : {{ aud_prob[2] }}%</li>
+          <li>开心    : {{ aud_prob[3] }}%</li>
+          <li>中性    : {{ aud_prob[4] }}%</li>
+          <li>悲伤    : {{ aud_prob[5] }}%</li>
+          <li>惊讶    : {{ aud_prob[6] }}%</li>
+        </ul>
+      </div>
+      <hr>
+      <h3>其他候选人情绪</h3>
+      <div id="audio_emotions_dist_other" style="margin-top: 10px;"></div>
+      <p>其他候选人最频繁的情绪是：<b>{{ aud_emo_other }}</b></p>
+      <div class="parent">
+        <ul>
+          <li>愤怒    : {{ aud_prob_other[0] }}%</li>
+          <li>厌恶    : {{ aud_prob_other[1] }}%</li>
+          <li>恐惧    : {{ aud_prob_other[2] }}%</li>
+          <li>开心    : {{ aud_prob_other[3] }}%</li>
+          <li>中性    : {{ aud_prob_other[4] }}%</li>
+          <li>悲伤    : {{ aud_prob_other[5] }}%</li>
+          <li>惊讶    : {{ aud_prob_other[6] }}%</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 视频情感区域 -->
+    <section id="video-section" class="content-section">
+      <h2 class="section-title">Perceived Video Emotions (视频情感识别)</h2>
+      <div class="legend1">
+        <p><span class="key-dot you"></span>你</p>
+        <p><span class="key-dot others"></span>其他测试者</p>
+      </div>
+      <div id="hist_density_perso" style="margin-top: 10px;"></div>
+      <h3>您最频繁出现的情感是：<b>{{ vid_emo }}</b></h3>
+      <div class="parent">
+        <ul>
+          <li>愤怒：{{ vid_prob[0] }}%</li>
+          <li>厌恶：{{ vid_prob[1] }}%</li>
+          <li>恐惧：{{ vid_prob[2] }}%</li>
+          <li>快乐：{{ vid_prob[3] }}%</li>
+          <li>悲伤：{{ vid_prob[4] }}%</li>
+          <li>惊讶：{{ vid_prob[5] }}%</li>
+          <li>中性：{{ vid_prob[6] }}%</li>
+        </ul>
+      </div>
+      <hr>
+      <h3>其他测试者情感</h3>
+      <div id="hist_density" style="margin-top: 10px;"></div>
+      <p>其他测试者最频繁出现的情感是：<b>{{ vid_emo_other }}</b></p>
+      <div class="parent">
+        <ul>
+          <li>Angry    : {{ vid_prob_other[0] }}%</li>
+          <li>Disgust  : {{ vid_prob_other[1] }}%</li>
+          <li>Fear     : {{ vid_prob_other[2] }}%</li>
+          <li>Happy    : {{ vid_prob_other[3] }}%</li>
+          <li>Neutral  : {{ vid_prob_other[4] }}%</li>
+          <li>Sad      : {{ vid_prob_other[5] }}%</li>
+          <li>Surprise : {{ vid_prob_other[6] }}%</li>
+        </ul>
+      </div>
+      <hr>
+      <h3>情感随时间变化</h3>
+      <iframe src="static/CSS/chart.html" width="100%" height="300" frameborder="0"></iframe>
+    </section>
+
+    <!-- 文本心理区域 -->
+    <section id="text-section" class="content-section">
+      <h2 class="section-title">Perceived Psychological Traits (文本心理特质)</h2>
+      <div class="legend1">
+        <p><span class="key-dot you"></span>您</p>
+        <p><span class="key-dot others"></span>其他候选人</p>
+      </div>
+      <div id="histo" style="margin-top: 10px;"></div>
+      <p>您最显著的特质是：<b>{{ trait }}</b></p>
+      <div class="parent">
+        <ul>
+          <li>外向性：{{ traits[0] }}%</li>
+          <li>神经质：{{ traits[1] }}%</li>
+          <li>宜人性：{{ traits[2] }}%</li>
+          <li>责任心：{{ traits[3] }}%</li>
+          <li>开放性：{{ traits[4] }}%</li>
+        </ul>
+      </div>
+      <p>您使用的高频词汇：</p>
+      <ul>
+        {% for el in common_words %}
+          <li>{{ el }}</li>
+        {% endfor %}
+      </ul>
+      <hr>
+      <h3>其他候选人心理特质</h3>
+      <div id="hist_density_other" style="margin-top: 10px;"></div>
+      <p>其他候选人最显著的特质是：<b>{{ trait_others }}</b></p>
+      <div class="parent">
+        <ul>
+          <li>外向性：{{ probas_others[0] }}%</li>
+          <li>神经质：{{ probas_others[1] }}%</li>
+          <li>宜人性：{{ probas_others[2] }}%</li>
+          <li>责任心：{{ probas_others[3] }}%</li>
+          <li>开放性：{{ probas_others[4] }}%</li>
+        </ul>
+      </div>
+      <p>其他候选人使用的高频词汇：</p>
+      <ul>
+        {% for el in common_words_others %}
+          <li>{{ el }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <!-- 综合结果区域 -->
+	<section id="integrated-section" class="content-section">
+	  <div id="integrated-result">
+	    <h2>综合分析结果</h2>
+	    <p><b>整体情绪倾向：</b> {{ integrated_emotion }} </p>
+	    <p><b>心理特质综合评分：</b> {{ integrated_trait_score }} </p>
+	    <p><b>抑郁等级判断：</b> 
+	      <span id="depression-level">{{ depression_level }}</span>
+	    </p>
+	    <p id="depression-desc">{{ depression_description }}</p>
+	
+	    <p><b>总结评价：</b></p>
+	    <p>{{ integrated_summary }}</p>
+	
+	    <div id="integrated_chart" style="margin-top: 20px; height: 400px;">
+	      <!-- 你可以用D3或其他库绘制综合可视化 -->
+	    </div>
+	  </div>
+	</section>
+
+    <!-- 干预系统区域 -->
+	<section id="ganyu-section" class="content-section">
+	  <div id="integrated-result">
+	    <h2>干预系统中心</h2>
+	    <p>请选择您希望进行的干预方式：</p>
+	
+	    <!-- 子模块导航 -->
+	    <div class="intervention-nav">
+	      <button class="intervention-btn" data-subtarget="game-section">🎮 小游戏</button>
+	      <button class="intervention-btn" data-subtarget="regulation-section">🧘 情绪调控</button>
+	      <button class="intervention-btn" data-subtarget="log-section">📓 情绪日志</button>
+	      <button class="intervention-btn" data-subtarget="ai-section">🤖 AI陪伴</button>
+	      <button class="intervention-btn" data-subtarget="pet-section">🐾 虚拟宠物</button>
+	    </div>
+	
+	    	<!-- 子模块内容 -->
+				<div class="intervention-content">
+				  <div id="game-section" class="sub-content active">
+				    <h3>小游戏</h3>
+				    <p>通过简短的益智小游戏，分散注意力，帮助缓解负面情绪。</p>
+				    
+				    <!-- 游戏切换按钮 -->
+				    <div class="game-nav">
+				      <button class="game-btn" data-game="flappy">🐦 Flappy Bird</button>
+				      <button class="game-btn" data-game="tetris">🧩 俄罗斯方块</button>
+				      <button class="game-btn" data-game="snake">🐍 贪吃蛇</button>
+				    </div>
+				    
+				    <!-- 不同游戏的 iframe 容器 -->
+				    <div class="game-content">
+				      <iframe id="flappy" class="game-frame active" src="games/sample_game.html" width="50%" height="700" frameborder="0"></iframe>
+				      <iframe id="tetris" class="game-frame" src="games/tetris.html" width="50%" height="700" frameborder="0"></iframe>
+				      <iframe id="snake" class="game-frame" src="games/snake.html" width="100%" height="700" frameborder="0"></iframe>
+				    </div>
+				  </div>
+				</div>
+				
+				<style>
+				  .game-frame { display: none; }
+				  .game-frame.active { display: block; }
+				</style>
+				
+				<script>
+				  document.querySelectorAll(".game-btn").forEach(btn => {
+				    btn.addEventListener("click", () => {
+				      const target = btn.dataset.game;
+				      // 隐藏所有游戏
+				      document.querySelectorAll(".game-frame").forEach(frame => {
+				        frame.classList.remove("active");
+				      });
+				      // 显示点击的那个
+				      document.getElementById(target).classList.add("active");
+				    });
+				  });
+				</script>
+	
+	      <div id="regulation-section" class="sub-content">
+	        <h3>情绪调控</h3>
+	        <p>提供呼吸训练、冥想音乐和渐进性肌肉放松指导。</p>
+	        <iframe src="regulation/emotion_regulation.html" width="100%" height="700" frameborder="0"></iframe>
+	      </div>
+	
+	      <div id="log-section" class="sub-content">
+				  <h3>📖 情绪日记本</h3>
+					<p>与 AI 聊天机器人交流，获得安慰与建议。</p>
+					<iframe src="diary/emotion_diary.html" width="100%" height="700" frameborder="0"></iframe>
+				</div>
+				
+
+	      <div id="ai-section" class="sub-content">
+	        <h3>AI陪伴</h3>
+	        <p>与 AI 聊天机器人交流，获得安慰与建议。</p>
+	        <iframe src="chat/ai_companion.html" width="100%" height="700" frameborder="0"></iframe>
+	      </div>
+	
+	      <div id="pet-section" class="sub-content">
+				  <h3>虚拟宠物</h3>
+				  <p>与一只可爱的虚拟宠物互动，培养积极情绪。</p>
+				  <iframe id="pet-frame" width="70%" height="700" frameborder="0"></iframe>
+				</div>
+				
+				<script>
+				  const petFrame = document.getElementById("pet-frame");
+				  // 读取 localStorage 判断
+				  const savedPet = localStorage.getItem("petData");
+				  if (savedPet) {
+				    petFrame.src = "pet/pet_game.html";   // 已有宠物 → 进入游戏页
+				  } else {
+				    petFrame.src = "pet/pet_home.html";   // 第一次 → 进入创建页
+				  }
+				</script>
+				
+	    </div>
+	  </div>
+	</section>
+
+	<style>
+	  .intervention-nav {
+	    margin: 15px 0;
+	    display: flex;
+	    gap: 10px;
+	    flex-wrap: wrap;
+	  }
+	  .intervention-btn {
+	    padding: 8px 14px;
+	    border: none;
+	    border-radius: 6px;
+	    background: #52796f;
+	    color: white;
+	    cursor: pointer;
+	    transition: background 0.3s;
+	  }
+	  .intervention-btn:hover {
+	    background: #354f52;
+	  }
+	  .sub-content { display: none; margin-top: 15px; }
+	  .sub-content.active { display: block; }
+	</style>
+	
+	<script>
+	  const interventionBtns = document.querySelectorAll('.intervention-btn');
+	  const subContents = document.querySelectorAll('.sub-content');
+	
+	  interventionBtns.forEach(btn => {
+	    btn.addEventListener('click', () => {
+	      subContents.forEach(s => s.classList.remove('active'));
+	      document.getElementById(btn.dataset.subtarget).classList.add('active');
+	    });
+	  });
+	</script>
+
+  </div>
+
+  <script>
+    const sidebarItems = document.querySelectorAll('.sidebar-item');
+    const contentSections = document.querySelectorAll('.content-section');
+
+    sidebarItems.forEach(item => {
+      item.addEventListener('click', () => {
+        sidebarItems.forEach(i => i.classList.remove('active'));
+        contentSections.forEach(s => s.classList.remove('active'));
+        item.classList.add('active');
+        const target = item.getAttribute('data-target');
+        document.getElementById(target).classList.add('active');
+      });
+    });
+  </script>
+
+  <!-- 引入绘图脚本 -->
+  <script type="text/javascript" src="/static/js/hist_aud_perso.js"></script>
+  <script type="text/javascript" src="/static/js/hist_aud_glob.js"></script>
+  <script type="text/javascript" src="/static/js/hist_vid_perso.js"></script>
+  <script type="text/javascript" src="/static/js/hist_vid_glob.js"></script>
+  <script type="text/javascript" src="/static/js/hist_txt_perso.js"></script>
+  <script type="text/javascript" src="/static/js/hist_txt_glob.js"></script>
+  <!-- 你还可以在这里加加载综合图表的脚本 -->
+
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>用户登录</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .container { width: 300px; margin: 50px auto; }
+        input { margin: 5px 0; padding: 5px; width: 100%; }
+        button { margin-top: 10px; padding: 8px; }
+        .flash { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>用户登录</h2>
+        {% for msg in get_flashed_messages() %}
+            <p class="flash">{{ msg }}</p>
+        {% endfor %}
+        <form method="post">
+            用户名：<input type="text" name="username"><br>
+            密码：<input type="password" name="password"><br>
+            <button type="submit">登录</button>
+            <p><a href="{{ url_for('register') }}">还没账号？去注册</a></p>
+        </form>
+    </div>
+</body>
+</html>
